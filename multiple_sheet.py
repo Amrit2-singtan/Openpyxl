@@ -1,61 +1,62 @@
 from openpyxl import Workbook
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
-# Tab color presets
+# === Constants ===
 TAB_COLORS = ['FF9999', '99CCFF', 'CCFFCC', 'FFFF99', 'FFCCFF']
+HEADER_FONT = Font(bold=True)
+CENTER_ALIGN = Alignment(horizontal="center", vertical="center")
 
-# --- Sample Data Generator ---
+# === Sample Data Generator ===
 def generate_sample_data(headers, row_index=1):
     return [f"Sample {header} {row_index}" for header in headers]
 
-# --- Header Extraction ---
+# === Header Extraction ===
 def extract_structured_headers(field_groups):
-    top_headers = []
-    sub_headers = []
-    for group_title, fields in field_groups.items():
+    top_headers, sub_headers = [], []
+    for group, fields in field_groups.items():
         keys = list(fields.keys())
-        top_headers.extend([group_title] * len(keys))
+        top_headers.extend([group] * len(keys))
         sub_headers.extend(keys)
     return top_headers, sub_headers
 
-# --- Fill Headers (with merging and alignment) ---
+# === Fill Header Rows (with merging and styles) ===
 def fill_headers(ws, field_groups):
     top_headers, sub_headers = extract_structured_headers(field_groups)
-    num_columns = len(sub_headers)
-
-    # Write group row and sub-header row
     ws.append(top_headers)
     ws.append(sub_headers)
 
-    # Merge cells for group headers
-    current_group = None
-    start_idx = 0
-    for i, group in enumerate(top_headers + ["END"]):  # Add sentinel
-        if group != current_group:
-            if current_group is not None:
-                end_idx = i
-                if end_idx - start_idx > 1:
-                    ws.merge_cells(
-                        start_row=1, start_column=start_idx + 1,
-                        end_row=1, end_column=end_idx
-                    )
-            current_group = group
-            start_idx = i
+    col_count = len(sub_headers)
 
-    # Center align all header cells
-    for row in ws.iter_rows(min_row=1, max_row=2, min_col=1, max_col=num_columns):
+    # Merge cells for each group in row 1
+    group_start = 0
+    for i in range(col_count + 1):  # Include sentinel
+        if i == col_count or top_headers[i] != top_headers[group_start]:
+            if i - group_start > 1:
+                ws.merge_cells(start_row=1, start_column=group_start + 1,
+                               end_row=1, end_column=i)
+            group_start = i
+
+    # Style header rows
+    for row in ws.iter_rows(min_row=1, max_row=2, max_col=col_count):
         for cell in row:
-            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = HEADER_FONT
+            cell.alignment = CENTER_ALIGN
 
-    return sub_headers  # Return sub-headers for later data filling
+    return sub_headers
 
-# --- Fill Data Rows ---
-def fill_data(ws, sub_headers, row_count=3):
+# === Fill Sample Data Rows ===
+def fill_data(ws, headers, row_count=3):
     for i in range(1, row_count + 1):
-        ws.append(generate_sample_data(sub_headers, i))
+        ws.append(generate_sample_data(headers, i))
 
-# --- Create Excel File ---
+# === Auto Fit Column Widths ===
+def autofit_columns(ws):
+    for col in ws.columns:
+        max_length = max(len(str(cell.value)) if cell.value else 0 for cell in col)
+        ws.column_dimensions[get_column_letter(col[0].column)].width = max_length + 2
+
+# === Main Workbook Creation ===
 def create_excel_from_export_fields(export_fields, filename):
     wb = Workbook()
     wb.remove(wb.active)
@@ -64,12 +65,13 @@ def create_excel_from_export_fields(export_fields, filename):
         ws = wb.create_sheet(title=sheet_name)
         ws.sheet_properties.tabColor = TAB_COLORS[idx % len(TAB_COLORS)]
 
-        sub_headers = fill_headers(ws, field_groups)
-        fill_data(ws, sub_headers)
+        headers = fill_headers(ws, field_groups)
+        fill_data(ws, headers)
+        autofit_columns(ws)
 
     wb.save(filename)
 
-# --- Main Export Fields ---
+# === Export Fields ===
 export_fields = {
     "Summary": {
         "Appraisal Year": {
@@ -149,5 +151,5 @@ export_fields = {
     },
 }
 
-# --- Run ---
-create_excel_from_export_fields(export_fields, "appraisal_export_separated.xlsx")
+# === Run Export ===
+create_excel_from_export_fields(export_fields, "appraisal_export_optimized_clean.xlsx")
