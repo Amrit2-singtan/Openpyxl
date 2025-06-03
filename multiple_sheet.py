@@ -2,7 +2,74 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
 
-# Your nested export structure
+# Tab color presets
+TAB_COLORS = ['FF9999', '99CCFF', 'CCFFCC', 'FFFF99', 'FFCCFF']
+
+# --- Sample Data Generator ---
+def generate_sample_data(headers, row_index=1):
+    return [f"Sample {header} {row_index}" for header in headers]
+
+# --- Header Extraction ---
+def extract_structured_headers(field_groups):
+    top_headers = []
+    sub_headers = []
+    for group_title, fields in field_groups.items():
+        keys = list(fields.keys())
+        top_headers.extend([group_title] * len(keys))
+        sub_headers.extend(keys)
+    return top_headers, sub_headers
+
+# --- Fill Headers (with merging and alignment) ---
+def fill_headers(ws, field_groups):
+    top_headers, sub_headers = extract_structured_headers(field_groups)
+    num_columns = len(sub_headers)
+
+    # Write group row and sub-header row
+    ws.append(top_headers)
+    ws.append(sub_headers)
+
+    # Merge cells for group headers
+    current_group = None
+    start_idx = 0
+    for i, group in enumerate(top_headers + ["END"]):  # Add sentinel
+        if group != current_group:
+            if current_group is not None:
+                end_idx = i
+                if end_idx - start_idx > 1:
+                    ws.merge_cells(
+                        start_row=1, start_column=start_idx + 1,
+                        end_row=1, end_column=end_idx
+                    )
+            current_group = group
+            start_idx = i
+
+    # Center align all header cells
+    for row in ws.iter_rows(min_row=1, max_row=2, min_col=1, max_col=num_columns):
+        for cell in row:
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    return sub_headers  # Return sub-headers for later data filling
+
+# --- Fill Data Rows ---
+def fill_data(ws, sub_headers, row_count=3):
+    for i in range(1, row_count + 1):
+        ws.append(generate_sample_data(sub_headers, i))
+
+# --- Create Excel File ---
+def create_excel_from_export_fields(export_fields, filename):
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    for idx, (sheet_name, field_groups) in enumerate(export_fields.items()):
+        ws = wb.create_sheet(title=sheet_name)
+        ws.sheet_properties.tabColor = TAB_COLORS[idx % len(TAB_COLORS)]
+
+        sub_headers = fill_headers(ws, field_groups)
+        fill_data(ws, sub_headers)
+
+    wb.save(filename)
+
+# --- Main Export Fields ---
 export_fields = {
     "Summary": {
         "Appraisal Year": {
@@ -82,67 +149,5 @@ export_fields = {
     },
 }
 
-# Tab color presets
-TAB_COLORS = ['FF9999', '99CCFF', 'CCFFCC', 'FFFF99', 'FFCCFF']
-
-# Generate sample data for given headers
-def generate_sample_data(headers, row_index=1):
-    return [f"Sample {header} {row_index}" for header in headers]
-
-# Extract two-level structured headers from nested dict
-def extract_structured_headers(field_groups):
-    top_headers = []
-    sub_headers = []
-    for group_title, fields in field_groups.items():
-        field_names = list(fields.keys())
-        top_headers.extend([group_title] * len(field_names))
-        sub_headers.extend(field_names)
-    return top_headers, sub_headers
-
-# Main function to create workbook
-def create_excel_from_export_fields(export_fields, filename):
-    wb = Workbook()
-    wb.remove(wb.active)
-
-    for idx, (sheet_name, field_groups) in enumerate(export_fields.items()):
-        ws = wb.create_sheet(title=sheet_name)
-        ws.sheet_properties.tabColor = TAB_COLORS[idx % len(TAB_COLORS)]
-
-        # Extract headers
-        top_headers, sub_headers = extract_structured_headers(field_groups)
-        num_columns = len(sub_headers)
-
-        # First row: group titles
-        ws.append(top_headers)
-
-        # Merge same group headers
-        current_group = None
-        start_idx = 0
-        for i, group in enumerate(top_headers + ["END"]):  # Add sentinel
-            if group != current_group:
-                if current_group is not None:
-                    end_idx = i
-                    if end_idx - start_idx > 1:
-                        ws.merge_cells(
-                            start_row=1, start_column=start_idx + 1,
-                            end_row=1, end_column=end_idx
-                        )
-                current_group = group
-                start_idx = i
-
-        # Second row: sub-headers
-        ws.append(sub_headers)
-
-        # Align headers
-        for row in ws.iter_rows(min_row=1, max_row=2, min_col=1, max_col=num_columns):
-            for cell in row:
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-
-        # Add sample data rows
-        for i in range(1, 4):
-            ws.append(generate_sample_data(sub_headers, i))
-
-    wb.save(filename)
-
-# Call to generate the file
-create_excel_from_export_fields(export_fields, "appraisal_export_grouped.xlsx")
+# --- Run ---
+create_excel_from_export_fields(export_fields, "appraisal_export_separated.xlsx")
